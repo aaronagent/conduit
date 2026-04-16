@@ -2,6 +2,8 @@ import { createApp } from "./app"
 import { loadConfig } from "./config"
 import { initDatabase } from "./db/schema"
 import { enableDatabaseSink } from "./db/log-sink"
+import { getSetting } from "./db/settings"
+import { getEnabledProviders } from "./db/providers"
 import { ensurePaths } from "./lib/paths"
 import { setupGitHubToken, setupCopilotToken } from "./lib/token"
 import { cacheModels } from "./lib/utils"
@@ -53,6 +55,14 @@ async function main() {
 
   // Cache models
   await cacheModels()
+
+  // Load settings from DB
+  state.stWebSearchEnabled = getSetting(db, "st_web_search_enabled") === "true"
+  state.stWebSearchApiKey = getSetting(db, "st_web_search_api_key") ?? process.env.TAVILY_API_KEY ?? null
+  state.providers = getEnabledProviders(db)
+  if (state.stWebSearchApiKey) {
+    logger.info("Tavily web search: enabled")
+  }
 
   // Create and start server
   const app = createApp(db, {
