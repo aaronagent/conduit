@@ -2,6 +2,8 @@ import type { Database } from "bun:sqlite"
 import { logEmitter } from "../util/log-emitter"
 import { insertRequest } from "./requests"
 import type { LogEvent } from "../util/log-event"
+import { playSound } from "../lib/sound"
+import { state } from "../lib/state"
 
 /**
  * Database log sink — listens to request_end events and inserts into SQLite.
@@ -34,6 +36,11 @@ export function enableDatabaseSink(db: Database): void {
         client_name: String(data.clientName ?? ""),
         client_version: data.clientVersion ? String(data.clientVersion) : null,
       })
+
+      // Play error sound if enabled
+      if (data.status === "error" && state.soundEnabled) {
+        playSound(state.soundName)
+      }
     } catch {
       // Swallow — DB write failure should never break request flow
     }

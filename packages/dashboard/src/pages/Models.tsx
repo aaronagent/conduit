@@ -4,15 +4,17 @@ import { api } from "../lib/api"
 export function Models() {
   const [models, setModels] = useState<any[]>([])
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     api.getModels()
-      .then((data) => setModels(Array.isArray(data) ? data : data.data || data.models || []))
-      .catch((e) => setError(e.message))
+      .then((data) => { setModels(Array.isArray(data) ? data : data.data || data.models || []); setLoading(false) })
+      .catch((e) => { setError(e.message); setLoading(false) })
   }, [])
 
   if (error) return <div className="error-msg">{error}</div>
-  if (!models.length) return <div className="loading">Loading models...</div>
+  if (loading) return <div className="loading"><div className="spinner" /><p>Loading models...</p></div>
+  if (!models.length) return <div><h1 className="page-title">Models</h1><div className="empty-state"><div className="empty-icon">◈</div><p>No models available.</p></div></div>
 
   const grouped: Record<string, any[]> = {}
   for (const m of models) {

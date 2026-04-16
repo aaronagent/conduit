@@ -2,6 +2,7 @@ import { Hono } from "hono"
 import type { Database } from "bun:sqlite"
 import { messageRoutes } from "./routes/messages/route"
 import { completionRoutes } from "./routes/chat-completions/route"
+import { responsesRoutes } from "./routes/responses/route"
 import { modelRoutes } from "./routes/models/route"
 import { createStatsRoute } from "./routes/stats"
 import { createRequestsRoute } from "./routes/api-requests"
@@ -30,6 +31,7 @@ export function createApp(db: Database, opts: { port: number; baseUrl: string | 
   app.route("/v1/messages", messageRoutes)
   app.route("/v1/chat/completions", completionRoutes)
   app.route("/chat/completions", completionRoutes)
+  app.route("/v1/responses", responsesRoutes)
   app.route("/v1/models", modelRoutes)
 
   // Management API routes

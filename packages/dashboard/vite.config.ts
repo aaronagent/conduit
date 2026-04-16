@@ -7,6 +7,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://localhost:7033",
       "/health": "http://localhost:7033",
+      "/ws": { target: "ws://localhost:7034", ws: true },
     },
   },
 });

@@ -23,4 +23,8 @@ export const api = {
   getKeys: () => fetchApi("/api/keys"),
   getUpstreams: () => fetchApi("/api/upstreams"),
   getHealth: () => fetchApi("/health"),
+  createKey: (name: string) => fetchApi("/api/keys", { method: "POST", body: JSON.stringify({ name }) }),
+  revokeKey: (id: string) => fetchApi(`/api/keys/${id}`, { method: "DELETE" }),
+  createUpstream: (data: any) => fetchApi("/api/upstreams", { method: "POST", body: JSON.stringify(data) }),
+  deleteUpstream: (id: number) => fetchApi(`/api/upstreams/${id}`, { method: "DELETE" }),
 }

@@ -3,10 +3,17 @@ import { api } from "../lib/api"
 
 export function Connect() {
   const [info, setInfo] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
 
   useEffect(() => {
-    api.getConnectionInfo().then(setInfo).catch(() => {})
+    api.getConnectionInfo()
+      .then(data => { setInfo(data); setLoading(false) })
+      .catch(e => { setError(e.message); setLoading(false) })
   }, [])
+
+  if (error) return <div className="error-msg">{error}</div>
+  if (loading) return <div className="loading"><div className="spinner" /><p>Loading connection info...</p></div>
 
   const baseUrl = info?.base_url || "http://localhost:7033"
 
@@ -17,7 +24,7 @@ export function Connect() {
       <div className="section">
         <div className="section-title">Claude Code</div>
         <div className="card">
-          <p style={{ marginBottom: 12, color: "var(--text-muted)", fontSize: 13 }}>
+          <p style={{ marginBottom: 12, color: "var(--text-secondary)", fontSize: 13 }}>
             Set these environment variables to route Claude Code through Conduit:
           </p>
           <div className="code-block">{`export ANTHROPIC_BASE_URL=${baseUrl}

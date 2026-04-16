@@ -5,6 +5,7 @@ export function Settings() {
   const [settings, setSettings] = useState<any>(null)
   const [connInfo, setConnInfo] = useState<any>(null)
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     Promise.all([
@@ -13,10 +14,12 @@ export function Settings() {
     ]).then(([s, c]) => {
       setSettings(s)
       setConnInfo(c)
-    }).catch((e) => setError(e.message))
+      setLoading(false)
+    }).catch((e) => { setError(e.message); setLoading(false) })
   }, [])
 
   if (error) return <div className="error-msg">{error}</div>
+  if (loading) return <div className="loading"><div className="spinner" /><p>Loading settings...</p></div>
 
   return (
     <div>
@@ -50,7 +53,7 @@ export function Settings() {
               ))}
             </dl>
           ) : (
-            <div className="loading">Loading settings...</div>
+            <div className="empty-state"><p>No settings available.</p></div>
           )}
         </div>
       </div>
