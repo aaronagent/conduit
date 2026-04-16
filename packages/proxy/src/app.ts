@@ -10,11 +10,21 @@ import { createKeysRoute } from "./routes/api-keys"
 import { createProvidersRoute } from "./routes/api-providers"
 import { createConnectionInfoRoute } from "./routes/connection-info"
 import { createCopilotInfoRoute } from "./routes/copilot-info"
+import { apiKeyAuth, dashboardAuth } from "./middleware"
 
-export function createApp(db: Database, opts: { port: number; baseUrl: string | null }): Hono {
+export function createApp(db: Database, opts: { port: number; baseUrl: string | null; apiKey?: string; internalKey?: string }): Hono {
   const app = new Hono()
 
   app.get("/health", (c) => c.json({ status: "ok" }))
+
+  // Auth middleware for AI coding routes
+  const aiAuth = apiKeyAuth({ envApiKey: opts.apiKey || null })
+  app.use("/v1/*", aiAuth)
+  app.use("/chat/*", aiAuth)
+
+  // Auth middleware for management/dashboard routes
+  const mgmtAuth = dashboardAuth({ envApiKey: opts.apiKey || null, internalKey: opts.internalKey || null })
+  app.use("/api/*", mgmtAuth)
 
   // AI API routes
   app.route("/v1/messages", messageRoutes)

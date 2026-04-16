@@ -18,12 +18,21 @@ import {
 } from "./stream-translation"
 import { createChatCompletions } from "../../services/copilot/create-chat-completions"
 import type { AnthropicStreamState } from "./anthropic-types"
+import { deriveClientIdentity } from "../../util/client-identity"
+import { resolveProvider } from "../../lib/upstream-router"
 
 export async function handleMessages(c: Context) {
   const startTime = performance.now()
   const requestId = generateRequestId()
 
   await checkRateLimit(state)
+
+  // Extract request metadata
+  const anthropicBeta = c.req.header("anthropic-beta") ?? null
+  const userAgent = c.req.header("user-agent") ?? null
+  const openaiUser = c.req.header("openai-user") ?? null
+  const userId = c.req.header("x-user-id") ?? null
+  const { sessionId, clientName, clientVersion } = deriveClientIdentity(userId, userAgent, "default", openaiUser)
 
   // Read raw body for passthrough, parse for routing decision
   const rawBody = await c.req.text()
@@ -34,15 +43,25 @@ export async function handleMessages(c: Context) {
   logEmitter.emitLog({
     ts: Date.now(), level: "info", type: "request_start", requestId,
     msg: `POST /v1/messages ${model}`,
-    data: { path: "/v1/messages", format: "anthropic", model, stream },
+    data: { path: "/v1/messages", format: "anthropic", model, stream, sessionId, clientName, clientVersion },
   })
+
+  // Check for custom provider routing
+  const resolved = resolveProvider(model)
+  if (resolved) {
+    logEmitter.emitLog({
+      ts: Date.now(), level: "info", type: "system", requestId,
+      msg: `Custom provider matched: ${resolved.provider.name} (pattern: ${resolved.matchedPattern})`,
+      data: null,
+    })
+  }
 
   const strategy = getRouteStrategy(model)
 
   try {
     if (strategy === "passthrough") {
       // ★ PASSTHROUGH: Claude models go directly, no translation
-      const response = await passthroughToMessages(rawBody, model, stream)
+      const response = await passthroughToMessages(rawBody, model, stream, anthropicBeta)
 
       if (stream && response.body) {
         // Stream passthrough: pipe the upstream SSE response directly to the client.
@@ -90,6 +109,7 @@ export async function handleMessages(c: Context) {
                 strategy: "passthrough",
                 inputTokens, outputTokens, latencyMs,
                 stream: true, status: "success", statusCode: 200,
+                sessionId, clientName, clientVersion,
               },
             })
           }
@@ -116,6 +136,7 @@ export async function handleMessages(c: Context) {
             inputTokens: usage?.input_tokens ?? 0,
             outputTokens: usage?.output_tokens ?? 0,
             latencyMs, stream: false, status: "success", statusCode: 200,
+            sessionId, clientName, clientVersion,
           },
         })
         return c.json(body)
@@ -171,6 +192,7 @@ export async function handleMessages(c: Context) {
               path: "/v1/messages", format: "anthropic", model,
               strategy: "translate", latencyMs,
               stream: true, status: "success", statusCode: 200,
+            sessionId, clientName, clientVersion,
             },
           })
         }
@@ -186,6 +208,7 @@ export async function handleMessages(c: Context) {
         path: "/v1/messages", format: "anthropic", model,
         strategy, latencyMs, stream,
         status: "error", statusCode, error: errorDetail,
+        sessionId, clientName, clientVersion,
       },
     })
     return forwardError(c, error)

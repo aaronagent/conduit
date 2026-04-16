@@ -29,17 +29,22 @@ export function getRouteStrategy(model: string): RouteStrategy {
  *   claude-sonnet-4-6        → claude-sonnet-4.6
  *   claude-haiku-4-5         → claude-haiku-4.5
  */
-export function translateModelName(model: string): string {
+export function translateModelName(model: string, anthropicBeta?: string | null): string {
+  // Parse beta flags from anthropic-beta header
+  const betas = anthropicBeta?.split(",").map((b) => b.trim()) ?? []
+  const wants1m = betas.some((b) => b.startsWith("context-1m-"))
+  const wantsFast = betas.some((b) => b.startsWith("fast-mode-"))
+
   const match = model.match(
-    /^(claude-(?:opus|sonnet|haiku))-(\d+)-(\d{1,2})(?:-(1m))?(?:-\d{8})?$/
+    /^(claude-(?:opus|sonnet|haiku))-(\d+)-(\d{1,2})(?:(?:-|\[)(1m|fast)\]?)?(?:-\d{8})?$/
   )
   if (match) {
     const [, family, major, minor, suffix] = match
     const base = `${family}-${major}.${minor}`
-    if (family === "claude-opus" && major === "4" && minor === "6") {
-      return `${base}-1m`
-    }
-    return suffix ? `${base}-${suffix}` : base
+    if (suffix) return `${base}-${suffix}`
+    if (wants1m) return `${base}-1m`
+    if (wantsFast) return `${base}-fast`
+    return base
   }
 
   const matchNoMinor = model.match(

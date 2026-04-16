@@ -29,10 +29,11 @@ export async function passthroughToMessages(
   rawBody: string,
   model: string,
   _stream: boolean,
+  anthropicBeta?: string | null,
 ): Promise<Response> {
   if (!state.copilotToken) throw new Error("Copilot token not found")
 
-  const translatedModel = translateModelName(model)
+  const translatedModel = translateModelName(model, anthropicBeta)
 
   // Parse, patch model name, strip unsupported fields
   const parsed = JSON.parse(rawBody) as Record<string, unknown>
