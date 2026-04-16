@@ -46,7 +46,8 @@ export async function passthroughToMessages(
     }
   }
 
-  // Copilot only supports effort: low/medium/high — "max" is Anthropic-only
+  // Copilot doesn't support effort "max" (requires anthropic-beta header
+  // that Copilot rejects). Map to "high" — Copilot's highest supported level.
   const outputConfig = parsed.output_config as Record<string, unknown> | undefined
   if (outputConfig?.effort === "max") {
     outputConfig.effort = "high"
