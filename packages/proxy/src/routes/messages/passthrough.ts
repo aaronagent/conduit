@@ -46,6 +46,13 @@ export async function passthroughToMessages(
     }
   }
 
+  // Copilot only supports effort: low/medium/high — map "max" to "high"
+  const outputConfig = parsed.output_config as Record<string, unknown> | undefined
+  if (outputConfig?.effort === "max") {
+    outputConfig.effort = "high"
+    logger.debug('Passthrough: mapped effort "max" → "high" (Copilot limit)')
+  }
+
   const patchedBody = JSON.stringify(parsed)
 
   logger.debug(`Passthrough: ${model} → ${translatedModel}`)
