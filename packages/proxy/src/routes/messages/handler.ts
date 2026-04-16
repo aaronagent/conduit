@@ -36,14 +36,16 @@ export async function handleMessages(c: Context) {
 
   // Read raw body for passthrough, parse for routing decision
   const rawBody = await c.req.text()
-  const payload = JSON.parse(rawBody) as { model: string; stream?: boolean; [key: string]: unknown }
+  const payload = JSON.parse(rawBody) as { model: string; stream?: boolean; thinking?: { type: string }; output_config?: { effort: string }; [key: string]: unknown }
   const model = payload.model
   const stream = !!payload.stream
+  const thinking = payload.thinking?.type ?? null
+  const effort = payload.output_config?.effort ?? null
 
   logEmitter.emitLog({
     ts: Date.now(), level: "info", type: "request_start", requestId,
     msg: `POST /v1/messages ${model}`,
-    data: { path: "/v1/messages", format: "anthropic", model, stream, sessionId, clientName, clientVersion },
+    data: { path: "/v1/messages", format: "anthropic", model, stream, thinking, effort, anthropicBeta, sessionId, clientName, clientVersion },
   })
 
   // Check for custom provider routing

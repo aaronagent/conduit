@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite"
+import { appendFileSync } from "node:fs"
 import { logEmitter } from "../util/log-emitter"
 import { insertRequest } from "./requests"
 import type { LogEvent } from "../util/log-event"
@@ -7,10 +8,22 @@ import { state } from "../lib/state"
 
 /**
  * Database log sink — listens to request_end events and inserts into SQLite.
+ * Also logs request_start metadata (effort, thinking, beta) for diagnostics.
  * Async/non-blocking — errors are swallowed to avoid disrupting the request flow.
  */
 export function enableDatabaseSink(db: Database): void {
   logEmitter.on("log", (event: LogEvent) => {
+    // Log request_start with effort/thinking metadata to file for diagnostics
+    if (event.type === "request_start") {
+      const data = event.data ?? {}
+      if (data.effort || data.thinking || data.anthropicBeta) {
+        try {
+          const line = `[${new Date(event.ts).toISOString()}] model=${data.model} effort=${data.effort ?? "none"} thinking=${data.thinking ?? "none"} beta=${data.anthropicBeta ?? "none"} client=${data.clientName ?? "?"}\n`
+          appendFileSync("/tmp/conduit-requests.log", line)
+        } catch { /* ignore */ }
+      }
+    }
+
     if (event.type !== "request_end") return
 
     const data = event.data ?? {}
