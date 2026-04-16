@@ -18,12 +18,14 @@ import { translateModelName } from "../../lib/model-router"
 import { logger } from "../../util/logger"
 
 /**
- * Fields that Copilot's /v1/messages endpoint may reject.
- * context_management with non-empty edits is rejected; empty edits are OK but useless.
- * We strip it unconditionally for safety.
+ * Fields that Copilot's /v1/messages endpoint rejects as "Extra inputs".
+ * These are Anthropic API features not (yet) supported by Copilot.
  */
 const FIELDS_TO_STRIP = new Set([
   "context_management",
+  "cache_control",   // top-level cache_control (per-block cache_control IS supported)
+  "container",
+  "inference_geo",
 ])
 
 export async function passthroughToMessages(
@@ -49,8 +51,8 @@ export async function passthroughToMessages(
 
   // Copilot effort mapping:
   //   - Supported: low, medium, high
-  //   - Unsupported: max (→ high), none (→ strip output_config), xhigh (→ high)
-  //   - Extra fields in output_config are rejected, so only keep "effort"
+  //   - Unsupported: max/xhigh → high, none → strip output_config
+  //   - output_config.format (structured outputs) IS supported — don't strip it
   const outputConfig = parsed.output_config as Record<string, unknown> | undefined
   if (outputConfig) {
     const effort = outputConfig.effort
@@ -58,14 +60,12 @@ export async function passthroughToMessages(
       outputConfig.effort = "high"
       logger.debug(`Passthrough: mapped effort "${effort}" → "high" (Copilot limit)`)
     } else if (effort === "none") {
-      delete parsed.output_config
+      delete outputConfig.effort
       logger.debug('Passthrough: stripped effort "none" (not supported by Copilot)')
-    }
-    // Strip any unknown fields in output_config (Copilot rejects extra inputs)
-    if (parsed.output_config) {
-      const cleaned: Record<string, unknown> = {}
-      if (outputConfig.effort) cleaned.effort = outputConfig.effort
-      parsed.output_config = cleaned
+      // If output_config is now empty, remove it
+      if (Object.keys(outputConfig).length === 0) {
+        delete parsed.output_config
+      }
     }
   }
 
