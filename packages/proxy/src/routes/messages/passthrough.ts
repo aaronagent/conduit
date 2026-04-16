@@ -18,8 +18,9 @@ import { translateModelName } from "../../lib/model-router"
 import { logger } from "../../util/logger"
 
 /**
- * Fields that Copilot's /v1/messages endpoint rejects.
- * These are Claude Code / Anthropic SDK extensions not (yet) supported by Copilot.
+ * Fields that Copilot's /v1/messages endpoint may reject.
+ * context_management with non-empty edits is rejected; empty edits are OK but useless.
+ * We strip it unconditionally for safety.
  */
 const FIELDS_TO_STRIP = new Set([
   "context_management",
@@ -46,12 +47,26 @@ export async function passthroughToMessages(
     }
   }
 
-  // Copilot doesn't support effort "max" (requires anthropic-beta header
-  // that Copilot rejects). Map to "high" — Copilot's highest supported level.
+  // Copilot effort mapping:
+  //   - Supported: low, medium, high
+  //   - Unsupported: max (→ high), none (→ strip output_config), xhigh (→ high)
+  //   - Extra fields in output_config are rejected, so only keep "effort"
   const outputConfig = parsed.output_config as Record<string, unknown> | undefined
-  if (outputConfig?.effort === "max") {
-    outputConfig.effort = "high"
-    logger.debug('Passthrough: mapped effort "max" → "high" (Copilot limit)')
+  if (outputConfig) {
+    const effort = outputConfig.effort
+    if (effort === "max" || effort === "xhigh") {
+      outputConfig.effort = "high"
+      logger.debug(`Passthrough: mapped effort "${effort}" → "high" (Copilot limit)`)
+    } else if (effort === "none") {
+      delete parsed.output_config
+      logger.debug('Passthrough: stripped effort "none" (not supported by Copilot)')
+    }
+    // Strip any unknown fields in output_config (Copilot rejects extra inputs)
+    if (parsed.output_config) {
+      const cleaned: Record<string, unknown> = {}
+      if (outputConfig.effort) cleaned.effort = outputConfig.effort
+      parsed.output_config = cleaned
+    }
   }
 
   const patchedBody = JSON.stringify(parsed)
