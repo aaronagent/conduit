@@ -10,7 +10,7 @@ export interface Config {
 
 export function loadConfig(): Config {
   return {
-    port: parseInt(process.env.CONDUIT_PORT ?? "7033", 10),
+    port: parseInt(process.env.CONDUIT_PORT ?? "7034", 10),
     apiKey: process.env.CONDUIT_API_KEY ?? "",
     internalKey: process.env.CONDUIT_INTERNAL_KEY ?? "",
     tokenPath: process.env.CONDUIT_TOKEN_PATH ?? "data/github_token",

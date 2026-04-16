@@ -45,20 +45,24 @@ export async function handleMessages(c: Context) {
       const response = await passthroughToMessages(rawBody, model, stream)
 
       if (stream && response.body) {
-        // Stream the response directly back to client
-        return streamSSE(c, async (sseStream) => {
-          const reader = response.body!.getReader()
-          const decoder = new TextDecoder()
-          let inputTokens = 0
-          let outputTokens = 0
+        // Stream passthrough: pipe the upstream SSE response directly to the client.
+        // Do NOT use Hono's streamSSE — it would double-encode the already-formatted SSE.
+        const { readable, writable } = new TransformStream()
+        const writer = writable.getWriter()
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let inputTokens = 0
+        let outputTokens = 0
 
+        // Pipe in background, log when done
+        ;(async () => {
           try {
             while (true) {
               const { done, value } = await reader.read()
               if (done) break
 
+              // Extract token usage from SSE events for logging
               const chunk = decoder.decode(value, { stream: true })
-              // Parse SSE events to extract token usage for logging
               const lines = chunk.split("\n")
               for (const line of lines) {
                 if (line.startsWith("data: ") && line !== "data: [DONE]") {
@@ -68,14 +72,14 @@ export async function handleMessages(c: Context) {
                       inputTokens = data.usage.input_tokens ?? inputTokens
                       outputTokens = data.usage.output_tokens ?? outputTokens
                     }
-                  } catch { /* ignore parse errors in individual chunks */ }
+                  } catch { /* ignore parse errors */ }
                 }
               }
 
-              // Write raw chunk directly - no translation needed
-              await sseStream.write(chunk)
+              await writer.write(value)
             }
           } finally {
+            await writer.close()
             reader.releaseLock()
             const latencyMs = Math.round(performance.now() - startTime)
             logEmitter.emitLog({
@@ -89,6 +93,14 @@ export async function handleMessages(c: Context) {
               },
             })
           }
+        })()
+
+        return new Response(readable, {
+          headers: {
+            "content-type": "text/event-stream",
+            "cache-control": "no-cache",
+            "connection": "keep-alive",
+          },
         })
       } else {
         // Non-streaming passthrough

@@ -1,7 +1,10 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 
-const DATA_DIR = process.env.CONDUIT_DATA_DIR ?? "data"
+// Resolve relative to the proxy package root (where package.json is),
+// not the cwd which changes depending on how bun runs the workspace
+const PROXY_ROOT = path.resolve(import.meta.dir, "../..")
+const DATA_DIR = process.env.CONDUIT_DATA_DIR ?? path.join(PROXY_ROOT, "data")
 const GITHUB_TOKEN_PATH = process.env.CONDUIT_TOKEN_PATH ?? path.join(DATA_DIR, "github_token")
 
 export const PATHS = {
