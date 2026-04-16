@@ -1,0 +1,26 @@
+const PROXY_URL = import.meta.env.VITE_PROXY_URL || "http://localhost:7033"
+
+async function fetchApi(path: string, options?: RequestInit) {
+  const res = await fetch(`${PROXY_URL}${path}`, {
+    ...options,
+    headers: { "Content-Type": "application/json", ...options?.headers },
+  })
+  if (!res.ok) throw new Error(`API error: ${res.status}`)
+  return res.json()
+}
+
+export const api = {
+  getStats: () => fetchApi("/api/stats"),
+  getRequests: (params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams()
+    if (params?.limit) q.set("limit", String(params.limit))
+    if (params?.offset) q.set("offset", String(params.offset))
+    return fetchApi(`/api/requests?${q}`)
+  },
+  getModels: () => fetchApi("/api/copilot/models"),
+  getConnectionInfo: () => fetchApi("/api/connection-info"),
+  getSettings: () => fetchApi("/api/settings"),
+  getKeys: () => fetchApi("/api/keys"),
+  getUpstreams: () => fetchApi("/api/upstreams"),
+  getHealth: () => fetchApi("/health"),
+}
