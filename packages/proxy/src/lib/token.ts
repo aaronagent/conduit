@@ -32,12 +32,72 @@ const defaultTimers: TimerFactory = {
 }
 
 export const setupCopilotToken = async (timers: TimerFactory = defaultTimers) => {
-  const { token, refresh_in } = await getCopilotToken()
+  const { token, refresh_in, expires_at } = await getCopilotToken()
   state.copilotToken = token
+  state.copilotTokenExpiresAt = expires_at
 
   logger.debug("GitHub Copilot Token fetched successfully!")
 
   scheduleTokenRefresh(refresh_in, timers)
+}
+
+// ---------------------------------------------------------------------------
+// Lazy / on-demand refresh
+// ---------------------------------------------------------------------------
+
+/**
+ * Safety window — refresh proactively if the token expires within this many
+ * seconds. Guards against slow network refreshes racing upstream requests.
+ */
+const REFRESH_SAFETY_SECONDS = 120
+
+/**
+ * Serializes concurrent refresh attempts so N simultaneous requests don't all
+ * hit GitHub's token endpoint when the token expires.
+ */
+let pendingRefresh: Promise<void> | null = null
+
+async function doRefresh(): Promise<void> {
+  const { token, expires_at } = await getCopilotToken()
+  state.copilotToken = token
+  state.copilotTokenExpiresAt = expires_at
+  logger.debug("Copilot token refreshed (on-demand)")
+}
+
+/**
+ * Call before forwarding any request upstream. Proactively refreshes the
+ * Copilot JWT if it's expired, missing, or about to expire within the
+ * safety window. Safe to call concurrently — only one network refresh
+ * happens at a time.
+ */
+export async function ensureFreshCopilotToken(): Promise<void> {
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const expiresAt = state.copilotTokenExpiresAt
+  const needsRefresh =
+    !state.copilotToken ||
+    expiresAt === 0 ||
+    expiresAt - nowSeconds <= REFRESH_SAFETY_SECONDS
+
+  if (!needsRefresh) return
+
+  if (!pendingRefresh) {
+    pendingRefresh = doRefresh().finally(() => {
+      pendingRefresh = null
+    })
+  }
+  await pendingRefresh
+}
+
+/**
+ * Force a refresh after an upstream 401. Idempotent under concurrent calls.
+ */
+export async function forceCopilotTokenRefresh(): Promise<void> {
+  if (!pendingRefresh) {
+    pendingRefresh = doRefresh().finally(() => {
+      pendingRefresh = null
+    })
+  }
+  await pendingRefresh
 }
 
 // ---------------------------------------------------------------------------
@@ -58,8 +118,9 @@ function scheduleTokenRefresh(
 
   const timer = timers.setInterval(async () => {
     try {
-      const { token, refresh_in } = await getCopilotToken()
+      const { token, refresh_in, expires_at } = await getCopilotToken()
       state.copilotToken = token
+      state.copilotTokenExpiresAt = expires_at
       logger.debug("Copilot token refreshed")
 
       // If upstream changed refresh_in, reschedule with new interval
@@ -94,8 +155,9 @@ function retryTokenRefresh(
 
   timers.setTimeout(async () => {
     try {
-      const { token, refresh_in } = await getCopilotToken()
+      const { token, refresh_in, expires_at } = await getCopilotToken()
       state.copilotToken = token
+      state.copilotTokenExpiresAt = expires_at
       logger.info("Copilot token recovered after retry")
       // Success — resume normal refresh schedule
       scheduleTokenRefresh(refresh_in, timers)

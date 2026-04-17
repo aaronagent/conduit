@@ -2,6 +2,7 @@ import { events } from "../../util/sse"
 import { copilotBaseUrl, copilotHeaders } from "../../lib/api-config"
 import { HTTPError } from "../../lib/error"
 import { state } from "../../lib/state"
+import { ensureFreshCopilotToken, forceCopilotTokenRefresh } from "../../lib/token"
 
 export interface ResponsesPayload {
   model: string
@@ -11,21 +12,27 @@ export interface ResponsesPayload {
 }
 
 export const createResponses = async (payload: ResponsesPayload) => {
+  await ensureFreshCopilotToken()
   if (!state.copilotToken) throw new Error("Copilot token not found")
 
   const enableVision = hasVisionContent(payload)
   const isAgentCall = hasAgentHistory(payload)
 
-  const headers: Record<string, string> = {
-    ...copilotHeaders(state, enableVision),
-    "X-Initiator": isAgentCall ? "agent" : "user",
-  }
+  const doFetch = () =>
+    fetch(`${copilotBaseUrl(state)}/responses`, {
+      method: "POST",
+      headers: {
+        ...copilotHeaders(state, enableVision),
+        "X-Initiator": isAgentCall ? "agent" : "user",
+      },
+      body: JSON.stringify(payload),
+    })
 
-  const response = await fetch(`${copilotBaseUrl(state)}/responses`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-  })
+  let response = await doFetch()
+  if (response.status === 401) {
+    await forceCopilotTokenRefresh()
+    response = await doFetch()
+  }
 
   if (!response.ok) {
     throw await HTTPError.fromResponse("Failed to create responses", response)

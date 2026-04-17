@@ -4,6 +4,8 @@ import type { ProviderRecord } from "./../db/providers"
 export interface State {
   githubToken: string | null
   copilotToken: string | null
+  /** Unix seconds. 0 = unknown / never fetched. */
+  copilotTokenExpiresAt: number
 
   accountType: string
   models: ModelsResponse | null
@@ -43,6 +45,7 @@ export interface State {
 export const state: State = {
   githubToken: null,
   copilotToken: null,
+  copilotTokenExpiresAt: 0,
   accountType: "individual",
   models: null,
   vsCodeVersion: null,

@@ -3,10 +3,12 @@ import { events } from "./../../util/sse"
 import { copilotHeaders, copilotBaseUrl } from "./../../lib/api-config"
 import { HTTPError } from "./../../lib/error"
 import { state } from "./../../lib/state"
+import { ensureFreshCopilotToken, forceCopilotTokenRefresh } from "./../../lib/token"
 
 export const createChatCompletions = async (
   payload: ChatCompletionsPayload,
 ) => {
+  await ensureFreshCopilotToken()
   if (!state.copilotToken) throw new Error("Copilot token not found")
 
   const enableVision = payload.messages.some(
@@ -20,16 +22,21 @@ export const createChatCompletions = async (
     ["assistant", "tool"].includes(msg.role),
   )
 
-  const headers: Record<string, string> = {
-    ...copilotHeaders(state, enableVision),
-    "X-Initiator": isAgentCall ? "agent" : "user",
-  }
+  const doFetch = () =>
+    fetch(`${copilotBaseUrl(state)}/chat/completions`, {
+      method: "POST",
+      headers: {
+        ...copilotHeaders(state, enableVision),
+        "X-Initiator": isAgentCall ? "agent" : "user",
+      },
+      body: JSON.stringify(payload),
+    })
 
-  const response = await fetch(`${copilotBaseUrl(state)}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(payload),
-  })
+  let response = await doFetch()
+  if (response.status === 401) {
+    await forceCopilotTokenRefresh()
+    response = await doFetch()
+  }
 
   if (!response.ok) {
     throw await HTTPError.fromResponse("Failed to create chat completions", response)

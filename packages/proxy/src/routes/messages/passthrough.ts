@@ -15,6 +15,7 @@ import { copilotHeaders, copilotBaseUrl } from "../../lib/api-config"
 import { HTTPError } from "../../lib/error"
 import { state } from "../../lib/state"
 import { translateModelName } from "../../lib/model-router"
+import { ensureFreshCopilotToken, forceCopilotTokenRefresh } from "../../lib/token"
 import { logger } from "../../util/logger"
 
 /**
@@ -34,6 +35,10 @@ export async function passthroughToMessages(
   _stream: boolean,
   anthropicBeta?: string | null,
 ): Promise<Response> {
+  // Proactive refresh if the cached JWT is stale or near expiry. Upstream
+  // JWTs expire in ~25–30 min; the previous setInterval-only refresh didn't
+  // always fire in time, so every request now guarantees a fresh token.
+  await ensureFreshCopilotToken()
   if (!state.copilotToken) throw new Error("Copilot token not found")
 
   const translatedModel = translateModelName(model, anthropicBeta)
@@ -130,17 +135,33 @@ export async function passthroughToMessages(
   // Check for agent messages
   const isAgentCall = rawBody.includes('"role":"assistant"') || rawBody.includes('"role":"tool"')
 
-  const headers: Record<string, string> = {
-    ...copilotHeaders(state, hasVision),
-    "X-Initiator": isAgentCall ? "agent" : "user",
-    "anthropic-version": "2023-06-01",
-  }
+  const doFetch = () =>
+    fetch(`${copilotBaseUrl(state)}/v1/messages`, {
+      method: "POST",
+      headers: {
+        ...copilotHeaders(state, hasVision),
+        "X-Initiator": isAgentCall ? "agent" : "user",
+        "anthropic-version": "2023-06-01",
+      },
+      body: patchedBody,
+    })
 
-  const response = await fetch(`${copilotBaseUrl(state)}/v1/messages`, {
-    method: "POST",
-    headers,
-    body: patchedBody,
-  })
+  let response = await doFetch()
+
+  // Belt-and-suspenders: even with proactive refresh, the upstream can
+  // occasionally return 401 "IDE token expired" (e.g. clock skew or a token
+  // that just rotated). Force-refresh once and retry the request.
+  if (response.status === 401) {
+    logger.warn("Upstream 401 — forcing Copilot JWT refresh and retrying once")
+    try {
+      await forceCopilotTokenRefresh()
+      response = await doFetch()
+    } catch (refreshError) {
+      logger.error("Failed to refresh Copilot JWT after 401", {
+        error: String(refreshError),
+      })
+    }
+  }
 
   if (!response.ok) {
     throw await HTTPError.fromResponse(
