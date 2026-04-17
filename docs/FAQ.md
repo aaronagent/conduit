@@ -128,4 +128,4 @@ PRs welcome. Things that would actually help:
 - DB-backed multi-tenant API keys
 - Better Cursor / Cline / Aider compatibility notes
 
-Run `bun run lint && bun run typecheck && bun run --filter @conduit/proxy test` before opening a PR.
+Run `bun run typecheck && bun run test` before opening a PR.
