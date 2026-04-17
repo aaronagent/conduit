@@ -75,12 +75,8 @@ export function apiKeyAuth(opts: ApiKeyAuthOpts) {
       return unauthorized(c, "Missing or invalid authentication credentials");
     }
 
-    // ck- prefix → reserved for future DB key lookup
-    if (token.startsWith("ck-")) {
-      return unauthorized(c, "DB keys not yet implemented");
-    }
-
-    // env key timing-safe compare
+    // env key timing-safe compare (prefix is irrelevant —
+    // the key just has to match CONDUIT_API_KEY)
     if (timingSafeEqual(token, envApiKey)) {
       c.set("keyName", "env:default");
       await next();

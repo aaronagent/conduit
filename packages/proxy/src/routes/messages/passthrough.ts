@@ -69,6 +69,57 @@ export async function passthroughToMessages(
     }
   }
 
+  // Copilot's Claude endpoint rejects `thinking.type: "enabled"` for newer
+  // models (e.g. claude-opus-4.7) — it requires `adaptive` plus
+  // output_config.effort to control thinking depth. Translate on the fly.
+  const thinking = parsed.thinking as Record<string, unknown> | undefined
+  if (thinking && thinking.type === "enabled") {
+    const budget = thinking.budget_tokens
+    thinking.type = "adaptive"
+    delete thinking.budget_tokens
+    // Carry budget → effort if the caller didn't pick one explicitly.
+    const oc = (parsed.output_config as Record<string, unknown> | undefined) ?? {}
+    if (!oc.effort) {
+      let effort: "low" | "medium" | "high" = "medium"
+      if (typeof budget === "number") {
+        if (budget <= 4000) effort = "low"
+        else if (budget >= 16000) effort = "high"
+      }
+      oc.effort = effort
+      parsed.output_config = oc
+    }
+    logger.debug(
+      `Passthrough: mapped thinking.enabled → adaptive (budget=${String(budget)}, effort=${String((parsed.output_config as Record<string, unknown>).effort)})`,
+    )
+  }
+
+  // Per-model effort constraints. Copilot enforces different reasoning_effort
+  // whitelists per model; clamp unsupported values instead of getting 400'd.
+  //   claude-opus-4.7   → only "medium"
+  //   claude-haiku-4.5  → does not support effort at all (strip)
+  const MODEL_EFFORT_OVERRIDES: Record<string, "medium" | "strip"> = {
+    "claude-opus-4.7": "medium",
+    "claude-opus-4-7": "medium",
+    "claude-haiku-4.5": "strip",
+    "claude-haiku-4-5": "strip",
+  }
+  const override = MODEL_EFFORT_OVERRIDES[translatedModel]
+  if (override) {
+    const oc = parsed.output_config as Record<string, unknown> | undefined
+    if (oc && "effort" in oc) {
+      if (override === "strip") {
+        delete oc.effort
+        if (Object.keys(oc).length === 0) delete parsed.output_config
+        logger.debug(`Passthrough: stripped effort for ${translatedModel} (not supported)`)
+      } else if (oc.effort !== override) {
+        logger.debug(
+          `Passthrough: clamped effort "${String(oc.effort)}" → "${override}" for ${translatedModel}`,
+        )
+        oc.effort = override
+      }
+    }
+  }
+
   const patchedBody = JSON.stringify(parsed)
 
   logger.debug(`Passthrough: ${model} → ${translatedModel}`)

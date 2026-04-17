@@ -74,6 +74,11 @@ async function main() {
 
   const server = Bun.serve({
     port: config.port,
+    // Bun's default idleTimeout is 10s, which kills long-running Claude
+    // streaming responses (opus-4.7 can think silently >10s before emitting
+    // the first delta). 255s is the Bun maximum and matches Anthropic's own
+    // server-side timeout window.
+    idleTimeout: 255,
     fetch(req, server) {
       const url = new URL(req.url)
       if (url.pathname === "/ws/logs") {
