@@ -1,4 +1,4 @@
-const PROXY_URL = import.meta.env.VITE_PROXY_URL || "http://localhost:7033"
+const PROXY_URL = import.meta.env.VITE_PROXY_URL || ""
 
 async function fetchApi(path: string, options?: RequestInit) {
   const res = await fetch(`${PROXY_URL}${path}`, {

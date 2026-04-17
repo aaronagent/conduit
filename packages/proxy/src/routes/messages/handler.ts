@@ -6,7 +6,7 @@ import { state } from "../../lib/state"
 import { logEmitter } from "../../util/log-emitter"
 import { generateRequestId } from "../../util/id"
 import { extractErrorDetails, forwardError } from "../../lib/error"
-import { getRouteStrategy } from "../../lib/model-router"
+import { getRouteStrategy, translateModelName } from "../../lib/model-router"
 import { passthroughToMessages } from "./passthrough"
 import {
   translateToOpenAI,
@@ -41,11 +41,12 @@ export async function handleMessages(c: Context) {
   const stream = !!payload.stream
   const thinking = payload.thinking?.type ?? null
   const effort = payload.output_config?.effort ?? null
+  const resolvedModel = translateModelName(model, anthropicBeta)
 
   logEmitter.emitLog({
     ts: Date.now(), level: "info", type: "request_start", requestId,
-    msg: `POST /v1/messages ${model}`,
-    data: { path: "/v1/messages", format: "anthropic", model, stream, thinking, effort, anthropicBeta, sessionId, clientName, clientVersion },
+    msg: `POST /v1/messages ${model} → ${resolvedModel}`,
+    data: { path: "/v1/messages", format: "anthropic", model, resolvedModel, stream, thinking, effort, anthropicBeta, sessionId, clientName, clientVersion },
   })
 
   // Check for custom provider routing
@@ -148,7 +149,7 @@ export async function handleMessages(c: Context) {
       ts: Date.now(), level: "info", type: "request_end", requestId,
       msg: `200 web_search (tavily) ${latencyMs}ms`,
       data: {
-        path: "/v1/messages", format: "anthropic", model,
+        path: "/v1/messages", format: "anthropic", model, resolvedModel,
         latencyMs, stream, status: "success", statusCode: 200,
         sessionId, clientName, clientVersion,
       },
@@ -245,7 +246,7 @@ export async function handleMessages(c: Context) {
               ts: Date.now(), level: "info", type: "request_end", requestId,
               msg: `200 ${model} ${latencyMs}ms`,
               data: {
-                path: "/v1/messages", format: "anthropic", model,
+                path: "/v1/messages", format: "anthropic", model, resolvedModel,
                 strategy: "passthrough",
                 inputTokens, outputTokens, latencyMs,
                 stream: true, status: "success", statusCode: 200,
@@ -271,7 +272,7 @@ export async function handleMessages(c: Context) {
           ts: Date.now(), level: "info", type: "request_end", requestId,
           msg: `200 ${model} ${latencyMs}ms`,
           data: {
-            path: "/v1/messages", format: "anthropic", model,
+            path: "/v1/messages", format: "anthropic", model, resolvedModel,
             strategy: "passthrough",
             inputTokens: usage?.input_tokens ?? 0,
             outputTokens: usage?.output_tokens ?? 0,
@@ -295,7 +296,7 @@ export async function handleMessages(c: Context) {
           ts: Date.now(), level: "info", type: "request_end", requestId,
           msg: `200 ${model} ${latencyMs}ms`,
           data: {
-            path: "/v1/messages", format: "anthropic", model,
+            path: "/v1/messages", format: "anthropic", model, resolvedModel,
             strategy: "translate", latencyMs,
             stream: false, status: "success", statusCode: 200,
           },
@@ -329,7 +330,7 @@ export async function handleMessages(c: Context) {
             ts: Date.now(), level: "info", type: "request_end", requestId,
             msg: `200 ${model} ${latencyMs}ms`,
             data: {
-              path: "/v1/messages", format: "anthropic", model,
+              path: "/v1/messages", format: "anthropic", model, resolvedModel,
               strategy: "translate", latencyMs,
               stream: true, status: "success", statusCode: 200,
             sessionId, clientName, clientVersion,
@@ -345,7 +346,7 @@ export async function handleMessages(c: Context) {
       ts: Date.now(), level: "error", type: "request_end", requestId,
       msg: `${statusCode} ${model} ${latencyMs}ms`,
       data: {
-        path: "/v1/messages", format: "anthropic", model,
+        path: "/v1/messages", format: "anthropic", model, resolvedModel,
         strategy, latencyMs, stream,
         status: "error", statusCode, error: errorDetail,
         sessionId, clientName, clientVersion,

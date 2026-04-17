@@ -31,8 +31,8 @@ export function Settings() {
           <div className="card">
             <dl className="kv-list">
               {connInfo.base_url && <><dt>Base URL</dt><dd>{connInfo.base_url}</dd></>}
-              {connInfo.endpoints?.map((ep: string) => (
-                <span key={ep}><dt>Endpoint</dt><dd>{ep}</dd></span>
+              {connInfo.endpoints && Object.entries(connInfo.endpoints).map(([name, path]) => (
+                <span key={name}><dt>{name}</dt><dd>{String(path)}</dd></span>
               ))}
               {connInfo.models?.length && <><dt>Models</dt><dd>{connInfo.models.length} available</dd></>}
             </dl>
