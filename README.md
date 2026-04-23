@@ -46,12 +46,12 @@ bun install
 CONDUIT_API_KEY=$(openssl rand -hex 16) bun run dev
 ```
 
-The proxy listens on `:7033` and a dashboard on `:7023`. Copy the key it prints — you'll use it below.
+The proxy listens on `:7133` and a dashboard on `:7023`. Copy the key it prints — you'll use it below.
 
 ### Point Claude Code at Conduit
 
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:7033
+export ANTHROPIC_BASE_URL=http://localhost:7133
 export ANTHROPIC_AUTH_TOKEN=<the-key-from-above>
 export ANTHROPIC_MODEL=claude-opus-4.7
 export ANTHROPIC_SMALL_FAST_MODEL=claude-haiku-4.5
@@ -64,7 +64,7 @@ Or save it as a one-shot alias:
 
 ```bash
 alias claude-copilot='unset ANTHROPIC_API_KEY; \
-  ANTHROPIC_BASE_URL=http://localhost:7033 \
+  ANTHROPIC_BASE_URL=http://localhost:7133 \
   ANTHROPIC_AUTH_TOKEN=<your-key> \
   ANTHROPIC_MODEL=claude-opus-4.7 \
   ANTHROPIC_SMALL_FAST_MODEL=claude-haiku-4.5 \
@@ -90,7 +90,7 @@ See [docs/MODEL_COMPATIBILITY.md](./docs/MODEL_COMPATIBILITY.md) for which model
 
 | Variable | Default | Description |
 |---|---|---|
-| `CONDUIT_PORT` | `7033` | Proxy listen port |
+| `CONDUIT_PORT` | `7133` | Proxy listen port |
 | `CONDUIT_API_KEY` | _(empty)_ | API key clients must present. If empty, dev-mode allows any request |
 | `CONDUIT_INTERNAL_KEY` | _(empty)_ | Dashboard → proxy auth |
 | `CONDUIT_TOKEN_PATH` | `data/github_token` | GitHub token file |

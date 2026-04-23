@@ -1,9 +1,13 @@
 const PROXY_URL = import.meta.env.VITE_PROXY_URL || ""
+const API_KEY = import.meta.env.VITE_API_KEY || ""
 
 async function fetchApi(path: string, options?: RequestInit) {
+  const authHeaders: Record<string, string> = API_KEY
+    ? { Authorization: `Bearer ${API_KEY}` }
+    : {}
   const res = await fetch(`${PROXY_URL}${path}`, {
     ...options,
-    headers: { "Content-Type": "application/json", ...options?.headers },
+    headers: { "Content-Type": "application/json", ...authHeaders, ...options?.headers },
   })
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()

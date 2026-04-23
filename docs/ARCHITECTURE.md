@@ -4,7 +4,7 @@ Conduit is a monorepo with two packages:
 
 ```
 packages/
-├── proxy/         Bun + Hono HTTP proxy on :7033
+├── proxy/         Bun + Hono HTTP proxy on :7133
 └── dashboard/     Vite + React 19 UI on :7023
 ```
 
@@ -13,7 +13,7 @@ packages/
 ```
 ┌──────────────┐     1. POST /v1/messages           ┌──────────────┐
 │  Claude Code │ ──────────────────────────────────▶│   Conduit    │
-└──────────────┘   (Anthropic Messages API)         │   :7033      │
+└──────────────┘   (Anthropic Messages API)         │   :7133      │
                                                     └──────┬───────┘
                                                            │
                                 2. model router            │

@@ -32,7 +32,7 @@ Yes. Set:
 ```python
 from anthropic import Anthropic
 client = Anthropic(
-    base_url="http://localhost:7033",
+    base_url="http://localhost:7133",
     auth_token="<your-conduit-key>",   # NOT api_key
 )
 ```

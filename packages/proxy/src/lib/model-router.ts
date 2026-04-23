@@ -41,9 +41,18 @@ export function translateModelName(model: string, anthropicBeta?: string | null)
   if (match) {
     const [, family, major, minor, suffix] = match
     const base = `${family}-${major}.${minor}`
-    if (suffix) return `${base}-${suffix}`
-    if (wants1m) return `${base}-1m`
-    if (wantsFast) return `${base}-fast`
+    const effectiveSuffix = suffix ?? (wants1m ? "1m" : wantsFast ? "fast" : null)
+
+    // Copilot upstream's /v1/messages path allows ~1M prompt regardless of the
+    // `-1m` model id suffix — the suffix only exists for claude-opus-4.6 and
+    // does not exist for other Claude models (opus-4.7-1m → 400 not_supported).
+    // So strip the suffix for any model that doesn't publish a -1m variant,
+    // but keep the 1M intent because the upstream honors it anyway.
+    if (effectiveSuffix === "1m" && base !== "claude-opus-4.6") {
+      return base
+    }
+
+    if (effectiveSuffix) return `${base}-${effectiveSuffix}`
     return base
   }
 

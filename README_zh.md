@@ -46,12 +46,12 @@ bun install
 CONDUIT_API_KEY=$(openssl rand -hex 16) bun run dev
 ```
 
-代理监听 `:7033`，Dashboard 监听 `:7023`。把控制台里打出来的 API key 记下来，下一步会用。
+代理监听 `:7133`，Dashboard 监听 `:7023`。把控制台里打出来的 API key 记下来，下一步会用。
 
 ### 让 Claude Code 走 Conduit
 
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:7033
+export ANTHROPIC_BASE_URL=http://localhost:7133
 export ANTHROPIC_AUTH_TOKEN=<上一步生成的 key>
 export ANTHROPIC_MODEL=claude-opus-4.7
 export ANTHROPIC_SMALL_FAST_MODEL=claude-haiku-4.5
@@ -64,7 +64,7 @@ claude
 
 ```bash
 alias claude-copilot='unset ANTHROPIC_API_KEY; \
-  ANTHROPIC_BASE_URL=http://localhost:7033 \
+  ANTHROPIC_BASE_URL=http://localhost:7133 \
   ANTHROPIC_AUTH_TOKEN=<你的 key> \
   ANTHROPIC_MODEL=claude-opus-4.7 \
   ANTHROPIC_SMALL_FAST_MODEL=claude-haiku-4.5 \
@@ -90,7 +90,7 @@ alias claude-copilot='unset ANTHROPIC_API_KEY; \
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `CONDUIT_PORT` | `7033` | 代理监听端口 |
+| `CONDUIT_PORT` | `7133` | 代理监听端口 |
 | `CONDUIT_API_KEY` | _(空)_ | 客户端要带的 API key。留空等于开发模式，任何请求都放行 |
 | `CONDUIT_INTERNAL_KEY` | _(空)_ | Dashboard → proxy 之间的内部鉴权 |
 | `CONDUIT_TOKEN_PATH` | `data/github_token` | GitHub token 文件位置 |

@@ -1,13 +1,17 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+const proxyPort = process.env.CONDUIT_PORT || "7133";
+const target = `http://localhost:${proxyPort}`;
+const wsTarget = `ws://localhost:${proxyPort}`;
+
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      "/api": "http://localhost:7034",
-      "/health": "http://localhost:7034",
-      "/ws": { target: "ws://localhost:7034", ws: true },
+      "/api": target,
+      "/health": target,
+      "/ws": { target: wsTarget, ws: true },
     },
   },
 });

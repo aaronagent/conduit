@@ -19,7 +19,7 @@ All notable changes to Conduit are documented here. Format follows [Keep a Chang
 Highlights from the early commits that established the current architecture:
 
 ### Added
-- Bun + Hono proxy on `:7033` with Vite + React 19 dashboard on `:7023`
+- Bun + Hono proxy on `:7133` with Vite + React 19 dashboard on `:7023`
 - GitHub OAuth Device Flow + Copilot JWT auto-refresh with exponential backoff
 - Native Anthropic Messages API passthrough for Claude models
 - OpenAI Chat Completions translation fallback for GPT/Gemini
