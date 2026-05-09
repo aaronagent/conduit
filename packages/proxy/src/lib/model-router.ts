@@ -36,7 +36,7 @@ export function translateModelName(model: string, anthropicBeta?: string | null)
   const wantsFast = betas.some((b) => b.startsWith("fast-mode-"))
 
   const match = model.match(
-    /^(claude-(?:opus|sonnet|haiku))-(\d+)-(\d{1,2})(?:(?:-|\[)(1m|fast)\]?)?(?:-\d{8})?$/
+    /^(claude-(?:opus|sonnet|haiku))-(\d+)-(\d{1,2})(?:(?:-|\[)(1m|fast|high|xhigh)\]?)?(?:-\d{8})?$/
   )
   if (match) {
     const [, family, major, minor, suffix] = match

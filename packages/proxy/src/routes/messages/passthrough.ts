@@ -55,15 +55,20 @@ export async function passthroughToMessages(
   }
 
   // Copilot effort mapping:
-  //   - Supported: low, medium, high
-  //   - Unsupported: max/xhigh → high, none → strip output_config
+  //   - Supported on most models: low, medium, high
+  //   - Newer model variants like claude-opus-4.7-xhigh REQUIRE effort=xhigh
+  //   - Generic xhigh on a non-xhigh model → high; max → high; none → strip
   //   - output_config.format (structured outputs) IS supported — don't strip it
   const outputConfig = parsed.output_config as Record<string, unknown> | undefined
   if (outputConfig) {
     const effort = outputConfig.effort
-    if (effort === "max" || effort === "xhigh") {
+    const modelAcceptsXhigh = translatedModel.endsWith("-xhigh")
+    if (effort === "max") {
+      outputConfig.effort = modelAcceptsXhigh ? "xhigh" : "high"
+      logger.debug(`Passthrough: mapped effort "max" → "${outputConfig.effort}"`)
+    } else if (effort === "xhigh" && !modelAcceptsXhigh) {
       outputConfig.effort = "high"
-      logger.debug(`Passthrough: mapped effort "${effort}" → "high" (Copilot limit)`)
+      logger.debug(`Passthrough: mapped effort "xhigh" → "high" (model ${translatedModel} does not support xhigh)`)
     } else if (effort === "none") {
       delete outputConfig.effort
       logger.debug('Passthrough: stripped effort "none" (not supported by Copilot)')
@@ -100,25 +105,36 @@ export async function passthroughToMessages(
 
   // Per-model effort constraints. Copilot enforces different reasoning_effort
   // whitelists per model; clamp unsupported values instead of getting 400'd.
-  //   claude-opus-4.7   → only "medium"
-  //   claude-haiku-4.5  → does not support effort at all (strip)
-  const MODEL_EFFORT_OVERRIDES: Record<string, "medium" | "strip"> = {
+  //   claude-opus-4.7         → only "medium"
+  //   claude-opus-4.7-high    → only "high"
+  //   claude-opus-4.7-xhigh   → only "xhigh"
+  //   claude-haiku-4.5        → does not support effort at all (strip)
+  const MODEL_EFFORT_OVERRIDES: Record<string, "medium" | "high" | "xhigh" | "strip"> = {
     "claude-opus-4.7": "medium",
     "claude-opus-4-7": "medium",
+    "claude-opus-4.7-high": "high",
+    "claude-opus-4.7-xhigh": "xhigh",
     "claude-haiku-4.5": "strip",
     "claude-haiku-4-5": "strip",
   }
   const override = MODEL_EFFORT_OVERRIDES[translatedModel]
   if (override) {
-    const oc = parsed.output_config as Record<string, unknown> | undefined
-    if (oc && "effort" in oc) {
-      if (override === "strip") {
+    let oc = parsed.output_config as Record<string, unknown> | undefined
+    if (override === "strip") {
+      if (oc && "effort" in oc) {
         delete oc.effort
         if (Object.keys(oc).length === 0) delete parsed.output_config
         logger.debug(`Passthrough: stripped effort for ${translatedModel} (not supported)`)
-      } else if (oc.effort !== override) {
+      }
+    } else {
+      // Force the locked effort, even if the client sent nothing or something else
+      if (!oc) {
+        oc = {}
+        parsed.output_config = oc
+      }
+      if (oc.effort !== override) {
         logger.debug(
-          `Passthrough: clamped effort "${String(oc.effort)}" → "${override}" for ${translatedModel}`,
+          `Passthrough: clamped effort "${String(oc.effort ?? "<unset>")}" → "${override}" for ${translatedModel}`,
         )
         oc.effort = override
       }
