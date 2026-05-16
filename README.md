@@ -86,6 +86,13 @@ Now `claude-copilot` runs Claude Code on Opus 4.7 via your Copilot subscription.
 
 See [docs/MODEL_COMPATIBILITY.md](./docs/MODEL_COMPATIBILITY.md) for which models support what, and [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for the internals.
 
+### Drive Claude Code from another device
+
+`bin/conduit-remote` wraps a persistent `tmux` session in a browser-based
+terminal so you can reach Claude Code from your phone, iPad, or another
+laptop — same Wi-Fi, Tailscale, Cloudflare Tunnel, or SSH all work. See
+[docs/REMOTE_ACCESS.md](./docs/REMOTE_ACCESS.md).
+
 ## Environment Variables
 
 | Variable | Default | Description |

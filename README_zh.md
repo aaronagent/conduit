@@ -86,6 +86,13 @@ alias claude-copilot='unset ANTHROPIC_API_KEY; \
 
 详细的模型兼容矩阵见 [docs/MODEL_COMPATIBILITY.md](./docs/MODEL_COMPATIBILITY.md)，架构细节见 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
 
+### 在别的设备上操作 Claude Code
+
+`bin/conduit-remote` 把一个常驻 tmux 会话包成网页终端，手机/iPad/另一台
+电脑（同 Wi-Fi、Tailscale、Cloudflare Tunnel 或 SSH 端口转发都行）打开
+浏览器就能直接接管本机的 Claude Code。详情见
+[docs/REMOTE_ACCESS.md](./docs/REMOTE_ACCESS.md)。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |

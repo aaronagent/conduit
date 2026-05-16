@@ -1,0 +1,261 @@
+#!/usr/bin/env bash
+# conduit-remote — serve a persistent Claude Code tmux session over a web terminal
+#
+# Default: binds to 127.0.0.1 (localhost only) — pair with Tailscale, Cloudflare
+# Tunnel, or `ssh -L` to reach it from another device.
+#
+# Flags:
+#   --lan         Bind to 0.0.0.0 so devices on the same Wi-Fi can connect
+#                 directly to http://<this-mac>.local:$PORT
+#   --cloudflare  Also start a Cloudflare Tunnel (trycloudflare.com) so the
+#                 service is reachable from anywhere over public HTTPS.
+#                 Requires `cloudflared` (brew install cloudflared).
+#   --port N      Web terminal port (default 7134)
+#   --session S   tmux session name (default conduit-remote)
+#   --user U      Basic-auth username (default conduit)
+#   --writable    Allow remote input (default: read-only)
+#   --kill        Kill the tmux session, ttyd server, and any cloudflared
+#                 tunnel this script started, then exit
+#   --status      Show whether the session/server/tunnel are running, exit
+#   -h, --help    This message
+#
+# Auth password: $CONDUIT_REMOTE_PASSWORD if set, otherwise the value of
+# CONDUIT_API_KEY in <repo>/.conduit-key.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PORT="${CONDUIT_REMOTE_PORT:-7134}"
+SESSION="${CONDUIT_REMOTE_SESSION:-conduit-remote}"
+USER_NAME="${CONDUIT_REMOTE_USER:-conduit}"
+BIND="127.0.0.1"
+WRITABLE=0
+ACTION="start"
+CLOUDFLARE=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --lan) BIND="0.0.0.0"; shift ;;
+    --cloudflare) CLOUDFLARE=1; shift ;;
+    --port) PORT="$2"; shift 2 ;;
+    --session) SESSION="$2"; shift 2 ;;
+    --user) USER_NAME="$2"; shift 2 ;;
+    --writable) WRITABLE=1; shift ;;
+    --kill) ACTION="kill"; shift ;;
+    --status) ACTION="status"; shift ;;
+    -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+PID_FILE="$REPO_ROOT/data/conduit-remote.pid"
+LOG_FILE="$REPO_ROOT/data/conduit-remote.log"
+CF_PID_FILE="$REPO_ROOT/data/conduit-cloudflared.pid"
+CF_LOG_FILE="$REPO_ROOT/data/conduit-cloudflared.log"
+CF_URL_FILE="$REPO_ROOT/data/conduit-cloudflared.url"
+mkdir -p "$REPO_ROOT/data"
+
+resolve_password() {
+  if [[ -n "${CONDUIT_REMOTE_PASSWORD:-}" ]]; then
+    echo "$CONDUIT_REMOTE_PASSWORD"
+    return
+  fi
+  local key_file="$REPO_ROOT/.conduit-key"
+  if [[ -f "$key_file" ]]; then
+    grep -E '^CONDUIT_API_KEY=' "$key_file" | head -1 | cut -d= -f2-
+    return
+  fi
+  echo ""
+}
+
+ttyd_running_pid() {
+  if [[ -f "$PID_FILE" ]]; then
+    local p; p="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; then
+      echo "$p"
+      return 0
+    fi
+  fi
+  pgrep -f "ttyd .*-p $PORT" || true
+}
+
+cloudflared_running_pid() {
+  if [[ -f "$CF_PID_FILE" ]]; then
+    local p; p="$(cat "$CF_PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$p" ]] && kill -0 "$p" 2>/dev/null; then
+      echo "$p"
+      return 0
+    fi
+  fi
+  echo ""
+}
+
+start_cloudflared() {
+  if ! command -v cloudflared >/dev/null 2>&1; then
+    echo "cloudflared not installed — run: brew install cloudflared" >&2
+    return 1
+  fi
+  if [[ -n "$(cloudflared_running_pid)" ]]; then
+    echo "cloudflared already running (pid $(cloudflared_running_pid))"
+    return 0
+  fi
+  : > "$CF_LOG_FILE"
+  nohup cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$PORT" \
+    > "$CF_LOG_FILE" 2>&1 &
+  echo $! > "$CF_PID_FILE"
+  # Wait for the trycloudflare.com URL to appear
+  local url=""
+  for _ in $(seq 1 30); do
+    url="$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$CF_LOG_FILE" 2>/dev/null | head -1 || true)"
+    if [[ -n "$url" ]]; then break; fi
+    sleep 1
+  done
+  if [[ -z "$url" ]]; then
+    echo "cloudflared did not report a URL within 30s — see $CF_LOG_FILE" >&2
+    tail -n 20 "$CF_LOG_FILE" >&2 || true
+    return 1
+  fi
+  echo "$url" > "$CF_URL_FILE"
+  echo "$url"
+}
+
+case "$ACTION" in
+  status)
+    echo "tmux session '$SESSION':"
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+      tmux list-clients -t "$SESSION" 2>/dev/null || true
+      echo "  RUNNING"
+    else
+      echo "  not running"
+    fi
+    pid="$(ttyd_running_pid || true)"
+    if [[ -n "$pid" ]]; then
+      echo "ttyd: RUNNING (pid $pid) on $BIND:$PORT"
+    else
+      echo "ttyd: not running"
+    fi
+    cfpid="$(cloudflared_running_pid || true)"
+    if [[ -n "$cfpid" ]]; then
+      url="$(cat "$CF_URL_FILE" 2>/dev/null || echo '(URL not captured)')"
+      echo "cloudflared: RUNNING (pid $cfpid) -> $url"
+    else
+      echo "cloudflared: not running"
+    fi
+    exit 0
+    ;;
+  kill)
+    pid="$(ttyd_running_pid || true)"
+    if [[ -n "$pid" ]]; then
+      kill "$pid" 2>/dev/null || true
+      echo "killed ttyd (pid $pid)"
+    fi
+    rm -f "$PID_FILE"
+    cfpid="$(cloudflared_running_pid || true)"
+    if [[ -n "$cfpid" ]]; then
+      kill "$cfpid" 2>/dev/null || true
+      echo "killed cloudflared (pid $cfpid)"
+    fi
+    rm -f "$CF_PID_FILE" "$CF_URL_FILE"
+    rm -f "$REPO_ROOT/data/conduit-remote.path"
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+      tmux kill-session -t "$SESSION"
+      echo "killed tmux session '$SESSION'"
+    fi
+    exit 0
+    ;;
+esac
+
+PASSWORD="$(resolve_password)"
+if [[ -z "$PASSWORD" ]]; then
+  echo "no password available: set CONDUIT_REMOTE_PASSWORD or put CONDUIT_API_KEY in $REPO_ROOT/.conduit-key" >&2
+  exit 1
+fi
+
+if [[ -n "$(ttyd_running_pid || true)" ]]; then
+  echo "ttyd already running on $BIND:$PORT (pid $(ttyd_running_pid)) — use --kill to stop it"
+  exit 1
+fi
+
+if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+  tmux new-session -d -s "$SESSION" -x 200 -y 50 -c "$REPO_ROOT"
+  tmux send-keys -t "$SESSION" "clear && echo 'Conduit remote session — run claude here.'" C-m
+fi
+
+TTYD_FLAGS=(
+  -p "$PORT"
+  -i "$BIND"
+  -t "titleFixed=Claude Code (conduit-remote)"
+  -t "fontSize=15"
+  -t "theme={\"background\":\"#0b0b0b\"}"
+)
+
+# Basic auth doesn't survive the WebSocket upgrade through HTTP/2 reverse
+# proxies like Cloudflare Tunnel — the browser drops the Authorization
+# header on /ws, ttyd rejects it ("User code denied connection"). When the
+# tunnel is on, switch to a long random URL path prefix instead, and rely
+# on the path + the random *.trycloudflare.com subdomain for secrecy.
+# (Anyone who guesses both 32-hex of path + 4 random words gets a shell, so
+# regenerate by re-running --cloudflare if you suspect leakage.)
+if [[ "$CLOUDFLARE" -eq 1 ]]; then
+  PATH_TOKEN_FILE="$REPO_ROOT/data/conduit-remote.path"
+  if [[ ! -s "$PATH_TOKEN_FILE" ]]; then
+    openssl rand -hex 16 > "$PATH_TOKEN_FILE"
+  fi
+  PATH_TOKEN="$(cat "$PATH_TOKEN_FILE")"
+  TTYD_FLAGS+=(-b "/$PATH_TOKEN")
+else
+  TTYD_FLAGS+=(--credential "$USER_NAME:$PASSWORD")
+fi
+
+if [[ "$WRITABLE" -eq 1 ]]; then
+  TTYD_FLAGS+=(-W)
+fi
+
+nohup ttyd "${TTYD_FLAGS[@]}" tmux attach-session -t "$SESSION" \
+  > "$LOG_FILE" 2>&1 &
+echo $! > "$PID_FILE"
+
+sleep 0.5
+if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+  echo "ttyd failed to start — see $LOG_FILE" >&2
+  tail -n 20 "$LOG_FILE" >&2 || true
+  exit 1
+fi
+
+cat <<EOF
+conduit-remote is up.
+
+  URL (local):    http://127.0.0.1:$PORT
+EOF
+if [[ "$BIND" == "0.0.0.0" ]]; then
+  HOSTNAME_LOCAL="$(scutil --get LocalHostName 2>/dev/null || hostname -s).local"
+  IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
+  echo "  URL (LAN):      http://${HOSTNAME_LOCAL}:$PORT"
+  [[ -n "$IP" ]] && echo "  URL (LAN IP):   http://${IP}:$PORT"
+fi
+
+if [[ "$CLOUDFLARE" -eq 1 ]]; then
+  echo "  starting Cloudflare Tunnel (this can take ~5-10s)..."
+  if cf_url="$(start_cloudflared)"; then
+    echo "  URL (public):   $cf_url/$PATH_TOKEN/"
+    echo "  Auth:           none — the random URL path is the secret"
+  else
+    echo "  Cloudflare Tunnel failed — see $CF_LOG_FILE" >&2
+  fi
+fi
+
+cat <<EOF
+  tmux session:   $SESSION  (attach locally with: tmux attach -t $SESSION)
+  Mode:           $( [[ "$WRITABLE" -eq 1 ]] && echo "read-write (-W)" || echo "read-only (pass --writable to allow input)" )
+EOF
+if [[ "$CLOUDFLARE" -ne 1 ]]; then
+  echo "  Auth:           user '$USER_NAME', password from .conduit-key"
+fi
+cat <<EOF
+  Logs:           $LOG_FILE$( [[ "$CLOUDFLARE" -eq 1 ]] && echo " (cloudflared: $CF_LOG_FILE)" )
+  Stop:           $0 --kill
+
+Inside the web terminal, run \`claude\` (or your claude-copilot alias) to start
+Claude Code. Detach with the usual tmux prefix (default Ctrl-b then d) —
+the session stays alive so you can reconnect from another device.
+EOF
