@@ -121,6 +121,10 @@ export async function passthroughToMessages(
   if (override) {
     let oc = parsed.output_config as Record<string, unknown> | undefined
     if (override === "strip") {
+      if ("thinking" in parsed) {
+        delete parsed.thinking
+        logger.debug(`Passthrough: stripped thinking for ${translatedModel} (not supported)`)
+      }
       if (oc && "effort" in oc) {
         delete oc.effort
         if (Object.keys(oc).length === 0) delete parsed.output_config

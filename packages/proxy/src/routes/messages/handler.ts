@@ -43,6 +43,49 @@ export async function handleMessages(c: Context) {
   const effort = payload.output_config?.effort ?? null
   const resolvedModel = translateModelName(model, anthropicBeta)
 
+  // === DIAGNOSTIC: dump anthropic request bodies to disk for inspection (ToonFlow internal calls) ===
+  try {
+    const fs = await import("fs")
+    const dumpPath = "/tmp/conduit-messages-dump.jsonl"
+    const msgs = (payload.messages as Array<{ role: string; content: unknown }> | undefined) ?? []
+    const last = msgs[msgs.length - 1]
+    const summary = {
+      ts: Date.now(),
+      requestId,
+      model,
+      stream,
+      msg_count: msgs.length,
+      last_role: last?.role,
+      last_user_text: (() => {
+        if (!last) return null
+        const c = last.content
+        if (typeof c === "string") return c.slice(0, 600)
+        if (Array.isArray(c)) {
+          return c
+            .map((b: { type?: string; text?: string }) => (b.type === "text" ? b.text ?? "" : ""))
+            .join("")
+            .slice(0, 600)
+        }
+        return null
+      })(),
+      first_system_text: (() => {
+        const sys = payload.system
+        if (typeof sys === "string") return sys.slice(0, 300)
+        if (Array.isArray(sys)) {
+          return sys
+            .map((b: { type?: string; text?: string }) => (b.type === "text" ? b.text ?? "" : ""))
+            .join("")
+            .slice(0, 300)
+        }
+        return null
+      })(),
+      total_payload_bytes: rawBody.length,
+    }
+    fs.appendFileSync(dumpPath, JSON.stringify(summary) + "\n")
+  } catch {
+    // ignore
+  }
+
   logEmitter.emitLog({
     ts: Date.now(), level: "info", type: "request_start", requestId,
     msg: `POST /v1/messages ${model} → ${resolvedModel}`,
