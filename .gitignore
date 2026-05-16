@@ -9,3 +9,10 @@ data/
 .env.local
 coverage/
 .DS_Store
+
+# Local API key file (created by `conduit setup`)
+.conduit-key
+
+# Local diagnostic dumps written by routes when debugging
+/tmp-dumps/
+*.dump.jsonl
