@@ -79,6 +79,10 @@ async function main() {
     // the first delta). 255s is the Bun maximum and matches Anthropic's own
     // server-side timeout window.
     idleTimeout: 255,
+    // Allow large request bodies (long Codex/Claude resume payloads, big tool
+    // schemas, file attachments). Bun's default can be as low as ~128 MB and
+    // returns 413 "failed to parse request" when exceeded. 512 MB is plenty.
+    maxRequestBodySize: 1024 * 1024 * 512,
     fetch(req, server) {
       const url = new URL(req.url)
       if (url.pathname === "/ws/logs") {
